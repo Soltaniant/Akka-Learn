@@ -12,6 +12,7 @@ import java.time.LocalTime;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Scanner;
 import java.util.concurrent.TimeUnit;
 
@@ -35,7 +36,7 @@ public class Client {
         Scanner myObj = new Scanner(System.in);
         String input;
 
-        for (; ; ) {//input loop
+        while (true) {//input loop
             input = myObj.nextLine();
 
             if (!c.responseMode)
@@ -46,12 +47,12 @@ public class Client {
 
     }
 
-    public Client() {//Construcror - init client's mode and inviterActor
+    public Client() {//Constructor - init client's mode and inviterActor
         this.responseMode = false;
         this.inviterActor = null;
     }
 
-    public void setResponseMode(boolean mode) {//Updates the client mode: true- answer to invitation, false- regular message input
+    public void setResponseMode(boolean mode) {//Updates the client mode: true-answer to invitation, false-regular message input
         this.responseMode = mode;
     }
 
@@ -89,7 +90,7 @@ public class Client {
             msg.text = text;
             if (clientActor != null)
                 clientActor.tell(msg, ActorRef.noSender());
-            else//connection us not available- server is offline
+            else//connection us not available-server is offline
                 System.out.println("server is offline! try again later!");
         }
     }
@@ -101,13 +102,13 @@ public class Client {
         String userName;
         Client client;
         ActorSelection serverActor;
-        //Map of groupName-previledge in group, of the client, , for every group which includes the client.
-        HashMap<String, Previledges> GroupsPreviledges = new HashMap<String, Previledges>();
+        //Map of groupName-privilege in group, of the client, for every group which includes the client.
+        HashMap<String, Previledges> GroupsPrivileges = new HashMap<>();
         //Map of groupName-group actor, for every group which includes the client.
-        HashMap<String, ActorRef> GroupsInformation = new HashMap<String, ActorRef>();
+        HashMap<String, ActorRef> GroupsInformation = new HashMap<>();
 
 
-        public ClientActor(String userName, Client client) {//Constructor- init the user name and it's client instance(of Client class)
+        public ClientActor(String userName, Client client) {//Constructor- init the username and it's client instance(of Client class)
             this.userName = userName;
             this.client = client;
         }
@@ -136,8 +137,9 @@ public class Client {
                         if (serverActor != null) {
                             String time_str = LocalTime.now().toString();
                             String fileNameToSave = "FROM_" + msg.sender + "_AT_" + time_str.substring(0, time_str.indexOf(".")).replaceAll(":", "-");
-                            FileOutputStream outStream = new FileOutputStream(fileNameToSave);
-                            outStream.write((byte[]) msg.contentInBytes);
+                            try (FileOutputStream outStream = new FileOutputStream(fileNameToSave)) {
+                                outStream.write(msg.contentInBytes);
+                            }
                             printText("[user][" + msg.sender + "] File received:" + new File(fileNameToSave).getAbsolutePath(), true);
                         }
                     })
@@ -149,13 +151,13 @@ public class Client {
                     })
                     .match(DisconnectMessage.class, msg ->
                     {//Get disconnect message from the server. Leave all groups which the user is in
-                        Iterator it = GroupsInformation.entrySet().iterator();
+                        Iterator<Map.Entry<String, ActorRef>> it = GroupsInformation.entrySet().iterator();
                         LeaveGroupRequestMessage lvMsg = new LeaveGroupRequestMessage();
                         lvMsg.userName = userName;
 
                         while (it.hasNext()) {
-                            Map.Entry pair = (Map.Entry) it.next();
-                            lvMsg.groupName = (String) pair.getKey();
+                            Entry<String, ActorRef> pair = it.next();
+                            lvMsg.groupName = pair.getKey();
                             GroupsInformation.get(lvMsg.groupName).tell(lvMsg, self());
                         }
                         printText(msg.userName + " has disconnected successfully!", false);
@@ -163,13 +165,13 @@ public class Client {
                     }).match(CreateGroupApproveMessage.class, msg ->
                     {//Get create group message from the server.
                         //update the maps: add the group to user's groups' map
-                        //and to the user's groups' previledges map.
+                        //and to the user's groups' privileges map.
                         GroupsInformation.put(msg.groupName, msg.groupActor);
-                        GroupsPreviledges.put(msg.groupName, Previledges.ADMIN);
+                        GroupsPrivileges.put(msg.groupName, Previledges.ADMIN);
                         printText(msg.groupName + " created successfully!", false);
                     })
                     .match(AskGroupInvMessage.class, msg ->
-                    {//Get an invite to group message from the group and
+                    {//Get an invitation to group message from the group and
                         //send an ask message to the target user.
                         //add to group if got Yes or else don't add
                         final Timeout timeout = new Timeout(Duration.create(100, SECONDS));
@@ -217,9 +219,9 @@ public class Client {
                     .match(AddUserToGroupMessage.class, msg ->
                     {//Get add user to group message.
                         //update the maps: add the group to user's groups' map
-                        //and to the user's groups' previledges map.
+                        //and to the user's groups' privileges map.
                         GroupsInformation.put(msg.groupName, msg.groupActor);
-                        GroupsPreviledges.put(msg.groupName, Previledges.USER);
+                        GroupsPrivileges.put(msg.groupName, Previledges.USER);
 
                     })
                     .match(RemoveFromGroupMessage.class, rmvMsg ->
@@ -248,22 +250,22 @@ public class Client {
                         //send relevant message to target
                         GetUnMuteMessage unMtUsrMsg = new GetUnMuteMessage();
                         unMtUsrMsg.userName = msg.userName;
-                        unMtUsrMsg.text = "You have been unmuted!";
+                        unMtUsrMsg.text = "You have been unmounted!";
                         unMtUsrMsg.timeReason = msg.timeReson;
                         unMtUsrMsg.groupName = msg.groupName;
-                        if (msg.timeReson) {//if the unmute is because of time left reason- specify message content
-                            unMtUsrMsg.text = "You have been unmuted! Muting time is up!";
+                        if (msg.timeReson) {//if to unmute is because of time left reason-specify message content
+                            unMtUsrMsg.text = "You have been unmute! Muting time is up!";
                         }
                         msg.targetActor.tell(unMtUsrMsg, self());
 
                     })
                     .match(GetMuteMessage.class, msg ->
                     {//Get mute message from sender user.
-                        //update previledge to mute and print the given message
-                        if (GroupsPreviledges.get(msg.groupName) != Previledges.MUTED) {//user is not muted
+                        //update privilege to mute and print the given message
+                        if (GroupsPrivileges.get(msg.groupName) != Previledges.MUTED) {//user is not muted
                             String text = "[" + msg.groupName + "]" + "[" + msg.userName + "]" + msg.text;
                             printText(text, true);
-                            GroupsPreviledges.put(msg.groupName, Previledges.MUTED);
+                            GroupsPrivileges.put(msg.groupName, Previledges.MUTED);
                         } else {//user is already muted from sender user.
                             OtherMessage mtMsg = new OtherMessage();
                             mtMsg.text = msg.userName + " is already muted!";
@@ -273,46 +275,47 @@ public class Client {
                     })
                     .match(GetUnMuteMessage.class, msg ->
                     {//Get unmute message from sender user.
-                        //update previledge to mute and print the given message
+                        //update privilege to mute and print the given message
                         //Send approval to unmute message to group
-                        if (GroupsPreviledges.get(msg.groupName) == Previledges.MUTED) {
-                            GroupsPreviledges.put(msg.groupName, Previledges.USER);
+                        if (GroupsPrivileges.get(msg.groupName) == Previledges.MUTED) {
+                            GroupsPrivileges.put(msg.groupName, Previledges.USER);
                             String text = "[" + msg.groupName + "]" + "[" + msg.userName + "]" + msg.text;
                             printText(text, true);
                             UnMuteGroupApproveMessage apvMsg = new UnMuteGroupApproveMessage();
                             apvMsg.userName = userName;
                             GroupsInformation.get(msg.groupName).tell(apvMsg, self());
-                        } else if (!msg.timeReason) {//Only if there is a second mute not because of time left reason- print double mute message
+                        } else if (!msg.timeReason) {//Only if there is a second mute not because of time left reason-print double mute message
                             OtherMessage mtMsg = new OtherMessage();
-                            mtMsg.text = msg.userName + " is already unmuted!";
+                            mtMsg.text = msg.userName + " is already unmute!";
                             sender().tell(mtMsg, self());
                         }
                     })
                     .match(CloseGroupMessage.class, msg -> {
-                        if (GroupsInformation.containsKey(msg.groupName) && GroupsPreviledges.containsKey(msg.groupName)) {//Get close group message. update map of groups ans send to the group an approval message
+                        if (GroupsInformation.containsKey(msg.groupName) && GroupsPrivileges.containsKey(msg.groupName)) {//Get close group message. update map of groups and send to the group an approval message
                             CloseGroupApproveMessage clsMsg = new CloseGroupApproveMessage();
                             clsMsg.groupName = msg.groupName;
                             clsMsg.userName = userName;
                             GroupsInformation.get(msg.groupName).tell(clsMsg, self());
                             GroupsInformation.remove(msg.groupName);
-                            GroupsPreviledges.remove(msg.groupName);
+                            GroupsPrivileges.remove(msg.groupName);
                         }
                     })
                     .match(OtherMessage.class, msg ->
-                    {//Get other message- print it
+                    {//Get other message-print it
                         printText(msg.text, false);
                     })
                     .match(BroadcastTextMessage.class, msg ->
-                    {//Get broadcast message- print it if the user is not in mute and should see this message
-                        if ((GroupsPreviledges.get(msg.groupName) != Previledges.MUTED) && (!(msg.joinBroadcast && userName.equals(msg.userName))))
+                    {//Get broadcast message-print it if the user is not in mute and should see this message
+                        if ((GroupsPrivileges.get(msg.groupName) != Previledges.MUTED) && (!(msg.joinBroadcast && userName.equals(msg.userName))))
                             System.out.println(msg.text);
                     })
                     .match(GroupFileMessage.class, msg ->
                     {//Get group file message, save it and print a relevant message
                         String time_str = LocalTime.now().toString();
                         String fileNameToSave = "FROM_" + msg.groupName + "_AT_" + time_str.substring(0, time_str.indexOf(".")).replaceAll(":", "-");
-                        FileOutputStream outStream = new FileOutputStream(fileNameToSave);
-                        outStream.write((byte[]) msg.contentInBytes);
+                        try (FileOutputStream outStream = new FileOutputStream(fileNameToSave)) {
+                            outStream.write(msg.contentInBytes);
+                        }
                         printText("[" + msg.groupName + "][" + msg.userName + "] File received:" + new File(fileNameToSave).getAbsolutePath(), true);
                     })
                     .build();
@@ -320,7 +323,7 @@ public class Client {
 
         @Override
         public void preStart() {//When clientActor is first initialized, connection message will be sent to the server if exists.
-            if (checkConnection()) {//If the sever is online(found by the selection in the serverpath)
+            if (checkConnection()) {//If the sever is online(found by the selection in the server-path)
                 ActorSelection server = getContext().actorSelection(serverPath);
                 //Send connection message to the server with the client's name.
                 ConnectRequestMessage conReqMsg = new ConnectRequestMessage();
@@ -374,10 +377,9 @@ public class Client {
                         inputStream.read(bytes);
                         inputStream.close();
                         msg.contentInBytes = bytes;
-                        //                                msg.contentInBytes = Files.readAllBytes(Paths.get(f.getAbsolutePath()));
                         msg.sourceFilePath = inputFilePath;
                         serverActor.tell(msg, self());
-                    } catch (Exception e) {
+                    } catch (Exception ignored) {
                     }
                 }
 
@@ -405,7 +407,7 @@ public class Client {
                             msg.contentInBytes = bytes;
                             msg.sourceFilePath = inputFilePath;
                             serverActor.tell(msg, self());
-                        } catch (Exception e) {
+                        } catch (Exception ignored) {
                         }
                     }
                 }
@@ -447,16 +449,16 @@ public class Client {
                     msg.targetName = inputParams[4];
                     serverActor.tell(msg, self());
                 }
-            } else if (text.startsWith("/group coadmin add")) {//Message of upgrade user to coadmin in a specific group input case
-                if (validInputLength(5, inputParams.length)) {//Send a message of upgrade user to coadmin in a specific group, to the server.
+            } else if (text.startsWith("/group coAdmin add")) {//Message of upgrade user to coAdmin in a specific group input case
+                if (validInputLength(5, inputParams.length)) {//Send a message of upgrade user to coAdmin in a specific group, to the server.
                     AddCoadminGroupMessage msg = new AddCoadminGroupMessage();
                     msg.userName = userName;
                     msg.userToAdd = inputParams[4];
                     msg.groupName = inputParams[3];
                     serverActor.tell(msg, self());
                 }
-            } else if (text.startsWith("/group coadmin remove")) {//Message of downgrade user from coadmin in a specific group input case
-                if (validInputLength(5, inputParams.length)) {//Send a message of downgrade user from coadmin in a specific group, to the se
+            } else if (text.startsWith("/group coAdmin remove")) {//Message of downgrade user from coAdmin in a specific group input case
+                if (validInputLength(5, inputParams.length)) {//Send a message of downgrade user from coAdmin in a specific group, to the se
                     RemoveCoadminGroupMessage msg = new RemoveCoadminGroupMessage();
                     msg.userName = userName;
                     msg.userToRemove = inputParams[4];
@@ -471,7 +473,6 @@ public class Client {
                     msg.target = inputParams[4];
                     try {//The time of muting should be a number, check before cast to int
                         msg.time = Integer.parseInt(inputParams[5]);
-                        ;
                         serverActor.tell(msg, self());
                     } catch (Exception e) {//Print not a number error to the client
                         printText("time should be a number!", false);
@@ -513,7 +514,7 @@ public class Client {
                     System.out.println("server is offline! try again later!");
                     return false;
                 }
-            } catch (Exception e) {
+            } catch (Exception ignored) {
             }
             return false;
         }
