@@ -16,8 +16,7 @@ public class ServerActor extends AbstractActor
         return receiveBuilder()
                 .match(ConnectRequestMessage.class, this::OnConnect)
                 .match(DisconnectMessage.class, this::OnDisconnect)
-                .match(GetUserActorMessage.class, this::OnGetUser)
-                .match(PrivateGroupTextMessage.class, this::OnPrivateMessage)
+                .match(PrivateUserTextMessage.class, this::OnPrivateMessage)
                 .match(PrivateFileMessage.class, this::OnPrivateFile)
                 .match(CreateGroupRequestMessage.class, this::OnCreateGroup)
                 .match(LeaveGroupRequestMessage.class, this::OnLeaveGroup)
@@ -153,19 +152,12 @@ public class ServerActor extends AbstractActor
         }
     }
 
-    private void OnPrivateMessage(PrivateGroupTextMessage message) {
+    private void OnPrivateMessage(PrivateUserTextMessage message) {
         if(doesUserExist(message.target, sender()))
         {
             ActorRef target = usersInformation.get(message.target);
             target.forward(message, getContext());
         }
-    }
-
-    private void OnGetUser(GetUserActorMessage message) {
-        SendUserActorMessage msg = new SendUserActorMessage();
-        msg.targetActor = usersInformation.get(message.targetName);
-        msg.found = usersInformation.containsKey(message.targetName);
-        getSender().tell(msg, getSelf());
     }
 
     private void OnDisconnect(DisconnectMessage message) {
