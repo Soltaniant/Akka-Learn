@@ -25,8 +25,8 @@ public class ServerActor extends AbstractActor
                 .match(InviteToGroupMessage.class, this::OnInviteToGroup)
                 .match(RemoveFromGroupMessage.class, this::OnRemoveFromGroup)
                 .match(CloseGroupMessage.class, this::OnCloseGroup)
-                .match(AddCoadminGroupMessage.class, this::OnAddCoadminGroup)
-                .match(RemoveCoadminGroupMessage.class, this::OnRemoveCoadminGroup)
+                .match(AddCoadminGroupMessage.class, this::OnAddCoAdminGroup)
+                .match(RemoveCoadminGroupMessage.class, this::OnRemoveCoAdminGroup)
                 .match(MuteGroupMessage.class, this::OnMuteGroup)
                 .match(UnMuteGroupMessage.class, this::OnUnmuteGroup).build();
     }
@@ -51,7 +51,7 @@ public class ServerActor extends AbstractActor
         }
     }
 
-    private void OnRemoveCoadminGroup(RemoveCoadminGroupMessage message) {
+    private void OnRemoveCoAdminGroup(RemoveCoadminGroupMessage message) {
         if(doesGroupExist(message.groupName, sender()) && doesUserExist(message.userToRemove, sender()))
         {
             ActorRef groupActor = groupsInformation.get(message.groupName);
@@ -60,7 +60,7 @@ public class ServerActor extends AbstractActor
         }
     }
 
-    private void OnAddCoadminGroup(AddCoadminGroupMessage message) {
+    private void OnAddCoAdminGroup(AddCoadminGroupMessage message) {
         if(doesGroupExist(message.groupName, sender()) && doesUserExist(message.userToAdd, sender()))
         {
             ActorRef groupActor = groupsInformation.get(message.groupName);
@@ -190,12 +190,9 @@ public class ServerActor extends AbstractActor
             connectMessage.server = serverActor;
             clientActor.tell(connectMessage, self());
 
-            //send connection request to the server
-//                        connectMessage.client = clientActor;
-//                        serverActor.tell(connectMessage, self());
         }
         else
-        {//Server holds user name in its users map, user name is in use
+        {
             OtherMessage msg = new OtherMessage();
             msg.text = message.userName +" is in use!";
             sender().tell(msg, ActorRef.noSender());
